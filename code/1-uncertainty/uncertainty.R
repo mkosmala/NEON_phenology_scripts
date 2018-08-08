@@ -1,76 +1,21 @@
-setwd("/media/mkosmala/Data/Dropbox/Ecology/Harvard/PhenologyScaling/Analysis/1-uncertainty")
-#setwd("D:/Dropbox/Ecology/Harvard/PhenologyScaling/Analysis/1-uncertainty")
+# This file runs an "uncertainty" analysis that examines to what degree
+# of precision each phenophase transition date is known. The result
+# is an estimate of uncertainty for each site-species for each phenophase
+# transition date (gammas), as well as an overall uncertainty estimate 
+# for each phenophase transition date (mus).
+
+setwd("~/Harvard/NEON_phenology/code/1-uncertainty")
 options(max.print = 100000)
-
-library("rstan") # observe startup messages
-
-# parallel
-#rstan_options(auto_write = TRUE)
-#options(mc.cores = parallel::detectCores())
+library("rstan") 
 
 # read in data
-data = read.csv("../all_phenology_dates_18_days_or_less_diff_20180319.csv")
-
-# set up and run the model
-model_dat = list(J = nrow(data), y = unlist(data["doy.diff"]))
-
-fit = stan(file = "uncertainty_mean_only.stan", data = model_dat, 
-           iter = 1000, chains = 4)
-
-# analyze
-print(fit)
-
-# do by phenophase types
-# break data frame up into one data frame for each phenophase
-list_by_phenophase = split(data, f = data$phenophase)
-num_phenophases = length(list_by_phenophase)
-
-# and run the model for each type
-all_fits = list()
-for (i in 1:num_phenophases) {
-
-  ndata = list_by_phenophase[[i]]
-  model_dat = list(J = nrow(ndata), y = unlist(ndata["doy.diff"]))
-
-  all_fits[[i]] = stan(fit=fit, data = model_dat, 
-                     iter = 1000, chains = 4)
-}
-
-# analyze
-for (i in 1:num_phenophases) {
-  print(names(list_by_phenophase[i]))
-  print(all_fits[[i]])
-}
-
-
-# add site-species info
-
-# specifically map site-spp to integers for reverse lookup
-sitespp = unique(data["site.species"])
-sppnum = order(sitespp)
-sitespp_lookup = data.frame(seq(1,length(sppnum)),sitespp[sppnum,])
-colnames(sitespp_lookup) = c("index","site-spp")
-write.csv(sitespp_lookup,"site-spp_lookup.csv",quote=FALSE,row.names=FALSE)
-
-# run the model
-site_spp_nums = as.numeric(unlist(data["site.species"]))
-model_dat = list(N = nrow(data), 
-                 K = max(site_spp_nums),
-                 sitesp = site_spp_nums,
-                 y = unlist(data["doy.diff"]))
-
-fit = stan(file = "uncertainty.stan", data = model_dat, 
-           iter = 1000, chains = 4)
-
-
-# analyze
-print(fit,pars = c("mu","tau","sigma","gamma"))
-plot(fit, pars = c("mu","tau","sigma","gamma"))
-
-
-###### ONLY THIS ANALYSIS MATTERS
+data = read.csv("../../data/all_phenology_dates_18_days_or_less_diff_20180319.csv")
 
 # add site-species info by phenophase types
+
+# compile the stan model
+# It will return an error, but it successfully compiles
+fit = stan(file = "uncertainty.stan", iter=0)
 
 # break data frame up into one data frame for each phenophase
 list_by_phenophase = split(data, f = data$phenophase)
@@ -91,8 +36,9 @@ for (i in 1:num_phenophases) {
   colnames(all_lookups[[i]]) = c("index","site.species")  
   
   ndatamerge = merge(ndata,all_lookups[[i]])
-  
   nsite_spp_nums = ndatamerge$index
+  
+  # run the model
   model_dat = list(N = nrow(ndata), 
                    K = max(nsite_spp_nums),
                    sitesp = nsite_spp_nums,
@@ -113,5 +59,6 @@ for (i in 1:num_phenophases) {
   print("")
 }
 sink()
+
 
 
